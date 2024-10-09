@@ -4,10 +4,12 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+tl = "0.7.8"
 rayon = "1.10.0"
 xml-rs = "0.8.22"
 foldhash = "0.1.3"
 hashbrown = { version = "0.15.0", features = ["rayon"] }
+lopdf = { version = "0.34.0", default-features = false, features = ["rayon", "nom_parser"] }
 
 [features]
 dbg = []
