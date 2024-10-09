@@ -2,6 +2,7 @@ use std::fmt::Debug;
 use std::io::BufReader;
 use std::fs::{File, read_dir};
 use std::path::{Path, PathBuf};
+use std::collections::VecDeque;
 
 use rayon::prelude::*;
 use hashbrown::HashMap;
@@ -105,9 +106,9 @@ fn print_ranks(ranks: &Ranks) {
 }
 
 fn main() -> std::io::Result::<()> {
-    let dir_path = "gl4";
-    let dir = read_dir(dir_path)?;
-    let strings = dir.filter_map(|e| e.map(|e| e.path()).ok())
+    let dir_path = "docs.gl";
+    let dir = DirRec::new(dir_path);
+    let strings = dir.into_iter()
         .par_bridge()
         .filter_map(|e| parse_xml(&e).map(|r| (e, r)).ok())
         .collect::<Vec::<_>>();
@@ -123,7 +124,7 @@ fn main() -> std::io::Result::<()> {
             (*term, tf * idf)
         }).collect::<TfIdf>();
 
-        (*path, tf_idf) 
+        (*path, tf_idf)
     }).collect::<TfIdfs>();
 
     let ranks = tfidfs.par_iter().map(|(path, tf_idf)| {
@@ -136,7 +137,7 @@ fn main() -> std::io::Result::<()> {
         (*path, top10)
     }).collect::<Ranks>();
 
-    print_ranks(&ranks);
+    // print_ranks(&ranks);
 
     Ok(())
 }
