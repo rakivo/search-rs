@@ -1,21 +1,24 @@
+#![feature(seek_stream_len)]
+
 use std::fmt::Debug;
-use std::io::BufReader;
-use std::fs::{File, read_dir};
+#[cfg(feature = "dbg")]
+use std::time::Instant;
+use std::fs::{read_dir, File};
 use std::path::{Path, PathBuf};
 use std::collections::VecDeque;
+use std::io::{BufReader, Read, Result as IoResult, Seek};
 
 use rayon::prelude::*;
 use hashbrown::HashMap;
 use foldhash::fast::RandomState;
 use xml::reader::{EventReader, XmlEvent};
 
-type IoResult<T> = std::io::Result::<T>;
-
+type Contents = Vec::<(PathBuf, String)>;
+type TfIdf<'a> = HashMap::<&'a str, f32>;
 type Index<'a> = HashMap::<&'a str, usize>;
 type Indexes<'a> = HashMap::<&'a PathBuf, Index<'a>>;
-type TfIdf<'a> = HashMap::<&'a str, f32>;
-type TfIdfs<'a> = HashMap::<&'a PathBuf, TfIdf<'a>>;
 type Rank<'a> = Vec::<(&'a str, f32)>;
+type PathRanks<'a> = Vec::<(&'a PathBuf, f32)>;
 type Ranks<'a> = HashMap::<&'a PathBuf, Rank<'a>>;
 
 #[derive(Debug)]
@@ -51,7 +54,8 @@ impl Iterator for DirRec {
     }
 }
 
-fn parse_xml<P>(file_path: P) -> IoResult::<String>
+#[inline]
+fn read_file<P>(file_path: P) -> IoResult::<BufReader<File>>
 where
     P: AsRef::<Path> + Debug
 {
@@ -59,26 +63,72 @@ where
         eprintln!("could not read {file_path:?}: {err}"); err
     })?;
 
-    let file = BufReader::new(file);
-    let parser = EventReader::new(file);
+    Ok(BufReader::new(file))
+}
 
-    let string = parser.into_iter().filter_map(|event| {
-        match event {
-            Ok(XmlEvent::Characters(text)) => Some(text),
-            _ => None
-        }
-    }).collect();
+trait ParseFn {
+    fn parse<P>(file_path: P) -> IoResult::<String>
+    where
+        P: AsRef::<Path> + Debug;
+}
 
-    Ok(string)
+struct Txt;
+
+impl ParseFn for Txt {
+    fn parse<P>(file_path: P) -> IoResult::<String>
+    where
+        P: AsRef::<Path> + Debug
+    {
+        let mut b = read_file(&file_path)?;
+        let stream_len = b.stream_len().unwrap_or_default();
+        let mut s = String::with_capacity(stream_len as _);
+        b.read_to_string(&mut s)?;
+        Ok(s)
+    }
+}
+
+struct Xml;
+
+impl ParseFn for Xml {
+    fn parse<P>(file_path: P) -> IoResult::<String>
+    where
+        P: AsRef::<Path> + Debug
+    {
+        let file = read_file(&file_path)?;
+        let parser = EventReader::new(file);
+
+        let string = parser.into_iter().filter_map(|event| {
+            match event {
+                Ok(XmlEvent::Characters(text)) => Some(text),
+                _ => None
+            }
+        }).collect();
+
+        Ok(string)
+    }
+}
+
+#[inline]
+fn parse(file_path: &Path) -> IoResult::<String> {
+    let ext = file_path.extension()
+        .unwrap_or_default()
+        .to_str()
+        .unwrap();
+
+    match ext {
+        "xml" | "xhtml" => Xml::parse(file_path),
+        _ => Txt::parse(file_path),
+    }
 }
 
 #[inline]
 fn index_content<'a>(content: &'a str) -> Index<'a> {
     content.split_whitespace()
         .filter(|s| s.chars().all(|c| c.is_alphabetic()))
-        .fold(Index::with_hasher(RandomState::default()),
+        .fold(Index::with_capacity_and_hasher(128, RandomState::default()),
               |mut map, word| {
-                  *map.entry(word.trim()).or_insert(0) += 1;
+                  let word = word.trim_matches(|c: char| !c.is_alphanumeric());
+                  *map.entry(word).or_insert(0) += 1;
                   map
               })
 }
@@ -95,7 +145,59 @@ fn idf(t: &str, df: &Indexes) -> f32 {
     (n / m).log10()
 }
 
+fn compute_ranks<'a>(contents: &'a Contents) -> Ranks<'a> {
+    let indexes = contents.par_iter()
+        .map(|(file_path, string)| (file_path, index_content(string)))
+        .collect::<Indexes>();
+    
+    indexes.par_iter().map(|(path, index)| {
+        let tf_idf = index.par_iter().map(|(term, _)| {
+            let tf = tf(term, index);
+            let idf = idf(term, &indexes);
+            (*term, tf * idf)
+        }).collect::<TfIdf>();
+
+        (*path, tf_idf)
+    }).map(|(path, tf_idf)| {
+        let mut stats = tf_idf.iter().collect::<Vec::<_>>();
+        stats.par_sort_unstable_by(|(_, a), (_, b)| unsafe {
+            b.partial_cmp(a).unwrap_unchecked()
+        });
+
+        let top100 = stats.into_iter().take(100).map(|(s, f)| (*s, *f)).collect();
+        (path, top100)
+    }).collect()
+}
+
+fn rank_documents_by_term<'a>(terms: &str, ranks: &'a Ranks) -> PathRanks<'a> {
+   let search_terms: Vec<String> = terms
+        .split(&[' ', ':', ',', '.'])
+        .map(|term| term.to_lowercase())
+        .collect();
+
+    let mut doc_ranks = ranks
+        .par_iter()
+        .map(|(path, rank)| {
+            let rank = search_terms
+                .iter()
+                .map(|search_term| {
+                    rank.iter()
+                        .find(|(term, _)| term.eq(search_term))
+                        .map_or(0.0, |(_, rank)| *rank)
+                }).sum();
+
+            (*path, rank)
+        }).collect::<PathRanks>();
+
+    doc_ranks.par_sort_unstable_by(|(_, a), (_, b)| unsafe {
+        b.partial_cmp(a).unwrap_unchecked()
+    });
+
+    doc_ranks
+}
+
 #[inline]
+#[allow(unused)]
 fn print_ranks(ranks: &Ranks) {
     for (path, ranks) in ranks {
         println!("{path:?}:");
@@ -105,39 +207,34 @@ fn print_ranks(ranks: &Ranks) {
     }
 }
 
-fn main() -> std::io::Result::<()> {
+#[inline]
+#[allow(unused)]
+fn print_path_ranks(ranks: &PathRanks) {
+    for (path, rank) in ranks.iter().filter(|(_, rank)| *rank != 0.0).take(5) {
+        println!("{path:?} => {rank}")
+    }
+}
+
+fn main() {
+    #[cfg(feature = "dbg")]
+    let start = Instant::now();
+
     let dir_path = "docs.gl";
     let dir = DirRec::new(dir_path);
-    let strings = dir.into_iter()
+    let contents = dir.into_iter()
         .par_bridge()
-        .filter_map(|e| parse_xml(&e).map(|r| (e, r)).ok())
-        .collect::<Vec::<_>>();
+        .filter_map(|e| parse(&e).ok().map(|r| (e, r)))
+        .collect::<Contents>();
 
-    let indexes = strings.par_iter()
-        .map(|(file_path, string)| (file_path, index_content(string)))
-        .collect::<Indexes>();
-
-    let tfidfs = indexes.par_iter().map(|(path, index)| {
-        let tf_idf = index.par_iter().map(|(term, _)| {
-            let tf = tf(term, index);
-            let idf = idf(term, &indexes);
-            (*term, tf * idf)
-        }).collect::<TfIdf>();
-
-        (*path, tf_idf)
-    }).collect::<TfIdfs>();
-
-    let ranks = tfidfs.par_iter().map(|(path, tf_idf)| {
-        let mut stats = tf_idf.iter().collect::<Vec::<_>>();
-        stats.par_sort_unstable_by(|(_, a), (_, b)| unsafe {
-            b.partial_cmp(a).unwrap_unchecked()
-        });
-
-        let top10 = stats.into_iter().take(10).map(|(s, f)| (*s, *f)).collect();
-        (*path, top10)
-    }).collect::<Ranks>();
+    let ranks = compute_ranks(&contents);
 
     // print_ranks(&ranks);
 
-    Ok(())
+    #[cfg(feature = "dbg")] {
+        let end = start.elapsed().as_millis();
+        println!("indexing took: {end} millis");
+    }
+
+    let path_ranks = rank_documents_by_term("linear interpolation", &ranks);
+    print_path_ranks(&path_ranks);
 }
