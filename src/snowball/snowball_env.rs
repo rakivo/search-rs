@@ -11,7 +11,6 @@ pub struct SnowballEnv<'a> {
     pub ket: i32,
 }
 
-
 impl<'a> SnowballEnv<'a> {
     pub fn create(value: &'a str) -> Self {
         let len = value.len();

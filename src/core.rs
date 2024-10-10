@@ -15,7 +15,7 @@ use foldhash::fast::RandomState;
 use xml::reader::{EventReader, XmlEvent};
 use crate::snowball::{SnowballEnv, algorithms::english_stemmer::stem};
 
-const SPLIT_CHARACTERS: &[char] = &[' ', ',', '.'];
+const SPLIT_CHARACTERS: &[char] = &[' ', ',', '.', ';'];
 
 const IGNORE: &[&str] = &["Length", "BBox", "FormType", "Matrix", "Type", "XObject", "Subtype", "Filter", "ColorSpace", "Width", "Height", "BitsPerComponent", "Length1", "Length2", "Length3", "PTEX.FileName", "PTEX.PageNumber", "PTEX.InfoDict", "FontDescriptor", "ExtGState", "MediaBox", "Annot",];
 
@@ -299,7 +299,7 @@ impl<'a> Model<'a> {
     }
 
     pub fn search(&self, query: &str) -> Ranks {
-        let tokens = query.split(SPLIT_CHARACTERS).collect::<Vec<_>>();
+        let tokens = query.split(SPLIT_CHARACTERS).filter_map(prepare_word).collect::<Vec<_>>();
 
         let mut ranks = self.docs.par_iter().filter_map(|(path, doc)| {
             let rank = tokens.iter().map(|token| {
