@@ -4,5 +4,6 @@ docs.gl
 gl4
 html
 lopdf
+src/snowball
 pdf
 *.pdf

@@ -54,13 +54,17 @@ impl Iterator for DirRec {
     }
 }
 
+macro_rules! am {
+    ($($tt: tt) *) => { std::sync::Arc::new(std::sync::Mutex::new($($tt) *)) }
+}
+
 #[inline]
 fn read_file<P>(file_path: P) -> IoResult::<BufReader<File>>
 where
     P: AsRef::<Path> + Debug
 {
-    let file = File::open(&file_path).map_err(|err| {
-        eprintln!("could not read {file_path:?}: {err}"); err
+    let file = File::open(&file_path).inspect_err(|err| {
+        eprintln!("could not read {file_path:?}: {err}")
     })?;
 
     Ok(BufReader::new(file))
@@ -102,14 +106,12 @@ where
 }
 
 fn get_pdf_text(doc: &Document) -> Result::<PdfText, IoError> {
-    use std::sync::{Arc, Mutex};
-
     let mut pdf_text = PdfText {
         text: BTreeMap::new(),
         errors: Vec::new(),
     };
 
-    let pdf_text_am = Arc::new(Mutex::new(&mut pdf_text));
+    let pdf_text_am = am!(&mut pdf_text);
 
     doc.get_pages()
         .into_par_iter()
@@ -151,14 +153,12 @@ impl ParseFn for Pdf {
     {
         let doc = load_pdf(&file_path)?;
         if doc.is_encrypted() {
-            let err = IoError::new(IoErrorKind::InvalidData, "doc is encrypted");
-            return Err(err)
+            return Err(IoError::new(IoErrorKind::InvalidData, "doc is encrypted"))
         }
 
         let text = get_pdf_text(&doc)?;
         if !text.errors.is_empty() {
-            let err = IoError::new(IoErrorKind::InvalidData, "could not parse document as pdf");
-            return Err(err)
+            return Err(IoError::new(IoErrorKind::InvalidData, "could not parse document as pdf"))
         }
 
         let string = text.text.iter().map(|(_, text)| text.join(" ")).collect::<String>();
@@ -187,8 +187,7 @@ impl ParseFn for Html {
     {
         let input = read_to_string(&file_path)?;
         let Ok(dom) = tl::parse(&input, ParserOptions::default()) else {
-            let err = IoError::new(IoErrorKind::InvalidData, "could not parse html");
-            return Err(err)
+            return Err(IoError::new(IoErrorKind::InvalidData, "could not parse html"))
         };
         let parser = dom.parser();
         let string = dom.nodes().iter().map(|node| node.inner_text(parser)).collect();
