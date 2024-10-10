@@ -1,10 +1,6 @@
 use std::str;
-use std::env;
 use std::slice;
 use std::fmt::Debug;
-#[cfg(feature = "dbg")]
-use std::time::Instant;
-use std::process::ExitCode;
 use std::path::{Path, PathBuf};
 use std::collections::{VecDeque, BTreeMap};
 use std::fs::{File, read_dir, read_to_string};
@@ -71,7 +67,6 @@ where
 }
 
 struct PdfText {
-    // key is page number
     text: BTreeMap<u32, Vec::<String>>,
     errors: Vec::<String>
 }
@@ -241,7 +236,7 @@ fn parse(file_path: &Path) -> IoResult::<String> {
 
 pub struct Doc<'a> {
     tf: TermFreq<'a>,
-    count: usize,
+    count: usize
 }
 
 type Docs<'a> = HashMap::<&'a PathBuf, Doc<'a>>;
@@ -297,7 +292,7 @@ impl<'a> Model<'a> {
 
         let mut ranks = self.docs.par_iter().filter_map(|(path, doc)| {
             let rank = tokens.iter().map(|token| {
-                Self::tf(token, doc)*self.idf(token)
+                Self::tf(token, doc) * self.idf(token)
             }).sum::<f32>();
 
             if !rank.is_nan() {
@@ -314,19 +309,9 @@ impl<'a> Model<'a> {
     pub fn add_document(&mut self, file_path: &'a PathBuf, content: &'a str) {
         self.rm_document(&file_path);
 
-        let (count, tf) = content.split(SPLIT_CHARACTERS)
-            .filter(|s| s.chars().all(|c| c.is_alphanumeric()))
-            .fold({
-                (0, TermFreq::with_capacity_and_hasher(128, RandomState::default()))
-            }, |(c, mut tf), t| {
-                if let Some(f) = tf.get_mut(t) {
-                    *f += 1;
-                } else {
-                    tf.insert(t, 1);
-                } (c + 1, tf)
-            });
+        let doc = Doc::new(content);
 
-        tf.keys().for_each(|t| {
+        doc.tf.keys().for_each(|t| {
             if let Some(f) = self.df.get_mut(t) {
                 *f += 1;
             } else {
@@ -334,7 +319,7 @@ impl<'a> Model<'a> {
             }
         });
 
-        self.docs.insert(file_path, Doc {count, tf});
+        self.docs.insert(file_path, doc);
     }
 
     #[inline]
@@ -364,33 +349,11 @@ impl<'a> Model<'a> {
     }
 }
 
-fn main() -> ExitCode {
-    let args = env::args().collect::<Vec::<_>>();
-    if args.len() < 3 {
-        eprintln!("usage: {program} <directory to search in> <term to search with>", program = args[0]);
-        return ExitCode::FAILURE
-    }
-
-    #[cfg(feature = "dbg")]
-    let start = Instant::now();
-
-    let ref dir_path = args[1];
-    let term = args[2..].join(" ").to_lowercase();
-
+#[inline]
+pub fn dir_get_contents(dir_path: &str) -> Contents {
     let dir = DirRec::new(dir_path);
-    let contents = dir.into_iter()
+    dir.into_iter()
         .par_bridge()
         .filter_map(|e| parse(&e).ok().map(|r| (e, r)))
-        .collect::<Contents>();
-
-    let mut model = Model::new();
-    model.add_contents(&contents);
-    let _results = model.search(&term);
-
-    #[cfg(feature = "dbg")] {
-        let end = start.elapsed().as_millis();
-        println!("indexing took: {end} millis");
-    }
-
-    return ExitCode::SUCCESS
+        .collect()
 }

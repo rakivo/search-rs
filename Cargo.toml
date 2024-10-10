@@ -13,7 +13,3 @@ lopdf = { version = "0.34.0", default-features = false, features = ["rayon", "no
 
 [features]
 dbg = []
-
-[[bin]]
-name = "search"
-path = "main.rs"
