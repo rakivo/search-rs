@@ -1,6 +1,7 @@
 use std::str;
 use std::slice;
 use std::fmt::Debug;
+use std::borrow::Cow;
 use std::path::{Path, PathBuf};
 use std::collections::{VecDeque, BTreeMap};
 use std::fs::{File, read_dir, read_to_string};
@@ -12,6 +13,7 @@ use hashbrown::HashMap;
 use lopdf::{Document, Object};
 use foldhash::fast::RandomState;
 use xml::reader::{EventReader, XmlEvent};
+use crate::snowball::{SnowballEnv, algorithms::english_stemmer::stem};
 
 const SPLIT_CHARACTERS: &[char] = &[' ', ',', '.'];
 
@@ -123,7 +125,7 @@ fn get_pdf_text(doc: &Document) -> Result::<PdfText, IoError> {
 
             Ok((npage,
                 text.split('\n')
-                .map(|s| prepare_word(s).to_string())
+                .map(|s| s.to_lowercase())
                 .collect()))
 
         }).for_each(|page: Result::<_, IoError>| {
@@ -242,9 +244,10 @@ type Docs<'a> = HashMap::<&'a PathBuf, Doc<'a>>;
 
 // trim and lowercase all the words but without copying
 #[inline]
-fn prepare_word<'a>(word: &'a str) -> &'a str {
+fn prepare_word<'a>(word: &'a str) -> Option::<&'a str> {
     let word = word.trim_matches(|c: char| !c.is_alphanumeric());
-    unsafe {
+    if word.is_empty() || word.len() > 64 { return None }
+    let lowered = unsafe {
         let bytes = slice::from_raw_parts_mut(word.as_ptr() as *mut _, word.len());
 
         bytes.iter_mut()
@@ -252,7 +255,17 @@ fn prepare_word<'a>(word: &'a str) -> &'a str {
             .for_each(|byte| *byte += 32);
 
         str::from_utf8_unchecked(bytes)
-    }
+    };
+
+    let mut env = SnowballEnv::create(lowered);
+    stem(&mut env);
+    
+    let ret = match env.get_current() {
+        Cow::Borrowed(bw) => bw,
+        Cow::Owned(ow) => Box::leak(ow.into_boxed_str())
+    };
+
+    Some(ret)
 }
 
 impl<'a> Doc<'a> {
@@ -260,8 +273,7 @@ impl<'a> Doc<'a> {
         let (count, tf) = content.split(SPLIT_CHARACTERS).fold({
             (0, TermFreq::with_capacity_and_hasher(128, RandomState::default()))
         }, |(c, mut tf), word| {
-            let word = prepare_word(word);
-            if !word.is_empty() {
+            if let Some(word) = prepare_word(word) {
                 *tf.entry(word).or_insert(0) += 1;
                 (c + 1, tf)
             } else {

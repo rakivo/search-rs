@@ -8,6 +8,7 @@ mod core;
 use core::*;
 mod server;
 use server::*;
+mod snowball;
 
 const ADDR: &str = "0.0.0.0:6969";
 
@@ -33,9 +34,9 @@ fn main() -> ExitCode {
         println!("indexing took: {end} millis");
     }
 
-    let mut server = Server::new(am!(model));
+    // let mut server = Server::new(am!(model));
 
-    server.serve(ADDR).inspect_err(|err| eprintln!("{err}")).unwrap();
+    // server.serve(ADDR).inspect_err(|err| eprintln!("{err}")).unwrap();
 
     return ExitCode::SUCCESS
 }
