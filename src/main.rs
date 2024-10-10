@@ -34,9 +34,9 @@ fn main() -> ExitCode {
         println!("indexing took: {end} millis");
     }
 
-    // let mut server = Server::new(am!(model));
+    let mut server = Server::new(am!(model));
 
-    // server.serve(ADDR).inspect_err(|err| eprintln!("{err}")).unwrap();
+    server.serve(ADDR).inspect_err(|err| eprintln!("{err}")).unwrap();
 
     return ExitCode::SUCCESS
 }
