@@ -4,7 +4,8 @@ use std::fmt::Debug;
 use std::borrow::Cow;
 use std::path::{Path, PathBuf};
 use std::collections::{VecDeque, BTreeMap};
-use std::fs::{File, read_dir, read_to_string};
+#[cfg(unix)] use std::os::unix::fs::MetadataExt;
+use std::fs::{File, read_dir, metadata, read_to_string};
 use std::io::{BufReader, Result as IoResult, Error as IoError, ErrorKind as IoErrorKind};
 
 use rayon::prelude::*;
@@ -14,6 +15,8 @@ use lopdf::{Document, Object};
 use foldhash::fast::RandomState;
 use xml::reader::{EventReader, XmlEvent};
 use crate::snowball::{SnowballEnv, algorithms::english_stemmer::stem};
+
+const GIG: u64 = 1073741824;
 
 const SPLIT_CHARACTERS: &[char] = &[' ', ',', '.', ';'];
 
@@ -25,6 +28,7 @@ type TermFreq<'a> = HashMap<&'a str, usize>;
 type Ranks<'a> = Vec::<(&'a PathBuf, f32)>;
 
 pub struct DirRec {
+    rec: usize,
     stack: VecDeque::<PathBuf>,
 }
 
@@ -35,7 +39,7 @@ impl DirRec {
     {
         let mut stack = VecDeque::new();
         stack.push_back(root.into());
-        DirRec {stack}
+        DirRec {rec: 0, stack}
     }
 }
 
@@ -48,6 +52,10 @@ impl Iterator for DirRec {
 
             match read_dir(&p) {
                 Ok(es) => es.filter_map(Result::ok).for_each(|e| {
+                    self.rec += 1;
+                    if self.rec >= 500_000 {
+                        panic!("directory is too big, aborting..")
+                    }
                     self.stack.push_back(e.path())
                 }),
                 Err(e) => eprintln!("ERROR: {e}")
@@ -125,9 +133,8 @@ fn get_pdf_text(doc: &Document) -> Result::<PdfText, IoError> {
 
             Ok((npage,
                 text.split('\n')
-                .map(|s| s.to_lowercase())
-                .collect()))
-
+                    .map(|s| s.to_lowercase())
+                    .collect()))
         }).for_each(|page: Result::<_, IoError>| {
             let mut pdf_text = unsafe { pdf_text_am.lock().unwrap_unchecked() };
             match page {
@@ -227,11 +234,23 @@ fn parse(file_path: &Path) -> IoResult::<String> {
             .unwrap_unchecked()
     };
 
+    let md = metadata(file_path)?;
+
+    #[cfg(unix)]
+    if md.mode() & 0o111 != 0 {
+        return Err(IoError::new(IoErrorKind::Unsupported, "not parsing binary files"))
+    }
+
+    if md.len() >= GIG {
+        return Err(IoError::new(IoErrorKind::InvalidData, "file is too big"))
+    }
+
     match ext {
         "pdf" => Pdf::parse(file_path),
         "html" => Html::parse(file_path),
         "xml" | "xhtml" => Xml::parse(file_path),
-        _ => Txt::parse(file_path),
+        "txt"  | "css" | "js" | "json" | "rs" | "py" | "rb" | "java" | "c" | "cpp" | "go" | "sh" | "md" | "yaml" | "ini" | "sql" | "csv" | "log" | "makefile" | "bat" | "php" | "pl" | "asm" | "dockerfile" | "erb" | "proto" | "tf" | "tfvars" | "toml" | "v" | "rspec" | "ml" | "dart" | "lua" | "coffee" | "scss" | "less" | "svg" | "acl" | "patch" | "diff" | "zsh" | "r" | "groovy" | "h" | "hpp" | "markdown" | "cson" | "wxml" | "wxs" | "cfg" | "properties" | "env" | "d" | "f90" | "f" | "jl" | "cabal" | "hs" | "nim" | "sol" | "swift" | "mxml" | "clj" | "cljs" | "lisp" | "el" | "sml" | "styl" | "nut" | "wsgi" | "raku" | "q" | "sage" | "pike" | "xqy" | "slim" | "hx" | "pmd" | "gsql" | "caddyfile" => Txt::parse(file_path),
+        _ => Err(IoError::new(IoErrorKind::InvalidData, "unknown extension"))
     }
 }
 
@@ -240,32 +259,32 @@ pub struct Doc<'a> {
     count: usize
 }
 
-type Docs<'a> = HashMap::<&'a PathBuf, Doc<'a>>;
+pub type Docs<'a> = HashMap::<&'a PathBuf, Doc<'a>>;
 
-// trim and lowercase all the words but without copying
+#[inline]
+unsafe fn str_to_lower<'a>(s: &'a str) -> &'a str {
+    let bytes = slice::from_raw_parts_mut(s.as_ptr() as *mut _, s.len());
+
+    bytes.iter_mut()
+        .filter(|byte| **byte >= b'A' && **byte <= b'Z')
+        .for_each(|byte| *byte += 32);
+
+    str::from_utf8_unchecked(bytes)
+}
+
+// trim, stem and lowercase word avoiding copying
 #[inline]
 fn prepare_word<'a>(word: &'a str) -> Option::<&'a str> {
     let word = word.trim_matches(|c: char| !c.is_alphanumeric());
     if word.is_empty() || word.len() > 64 { return None }
-    let lowered = unsafe {
-        let bytes = slice::from_raw_parts_mut(word.as_ptr() as *mut _, word.len());
-
-        bytes.iter_mut()
-            .filter(|byte| **byte >= b'A' && **byte <= b'Z')
-            .for_each(|byte| *byte += 32);
-
-        str::from_utf8_unchecked(bytes)
-    };
-
-    let mut env = SnowballEnv::create(lowered);
+    let word = unsafe { str_to_lower(word) };
+    let mut env = SnowballEnv::create(word);
     stem(&mut env);
-    
-    let ret = match env.get_current() {
+    let word = match env.get_current() {
+        Cow::Owned(ow) => Box::leak(ow.into_boxed_str()),
         Cow::Borrowed(bw) => bw,
-        Cow::Owned(ow) => Box::leak(ow.into_boxed_str())
     };
-
-    Some(ret)
+    Some(word)
 }
 
 impl<'a> Doc<'a> {
@@ -286,20 +305,22 @@ impl<'a> Doc<'a> {
 }
 
 pub struct Model<'a> {
-    pub docs: Docs<'a>,
-    pub df: DocFreq<'a>
+    pub df: DocFreq<'a>,
+    pub docs: Docs<'a>
 }
 
 impl<'a> Model<'a> {
     pub fn new() -> Self {
         Model {
-            docs: HashMap::with_capacity_and_hasher(32, RandomState::default()),
+            docs: Docs::with_capacity_and_hasher(128, RandomState::default()),
             df: HashMap::with_capacity_and_hasher(128, RandomState::default())
         }
     }
 
     pub fn search(&self, query: &str) -> Ranks {
-        let tokens = query.split(SPLIT_CHARACTERS).filter_map(prepare_word).collect::<Vec<_>>();
+        let tokens = query.split(SPLIT_CHARACTERS)
+            .filter_map(prepare_word)
+            .collect::<Vec<_>>();
 
         let mut ranks = self.docs.par_iter().filter_map(|(path, doc)| {
             let rank = tokens.iter().map(|token| {
@@ -335,9 +356,21 @@ impl<'a> Model<'a> {
 
     #[inline]
     pub fn add_contents(&mut self, contents: &'a Contents) {
-        contents.iter().for_each(|(file_path, content)| {
-            self.add_document(file_path, content);
-        });
+        let have_big_files = contents.iter()
+            .take(contents.len() / 2)
+            .any(|content| content.1.len() >= GIG as _);
+
+        if have_big_files {
+            let zelf = am!(self);
+            contents.par_iter().for_each(|(file_path, content)| {
+                let mut zelf = unsafe { zelf.lock().unwrap_unchecked() };
+                zelf.add_document(file_path, content);
+            });
+        } else {
+            contents.iter().for_each(|(file_path, content)| {
+                self.add_document(file_path, content);
+            });
+        }
     }
 
     #[inline]
