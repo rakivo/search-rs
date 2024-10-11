@@ -61,5 +61,5 @@ fn main() -> ExitCode {
         return ExitCode::FAILURE
     }
 
-    return ExitCode::SUCCESS
+    ExitCode::SUCCESS
 }
