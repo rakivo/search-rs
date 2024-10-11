@@ -1,7 +1,7 @@
 use std::env;
 #[cfg(feature = "dbg")]
-use std::path::PathBuf;
 use std::time::Instant;
+use std::path::PathBuf;
 use std::process::ExitCode;
 
 #[macro_use]
@@ -11,7 +11,7 @@ mod server;
 use server::*;
 mod snowball;
 
-const ADDR: &str = "0.0.0.0";
+const ADDR: &str = "localhost";
 const DEFAULT_PORT: &str = "6969";
 
 fn main() -> ExitCode {
@@ -22,6 +22,7 @@ fn main() -> ExitCode {
     }
 
     let ref dir_path = args[1];
+    let dir_path_buf = Into::<PathBuf>::into(dir_path);
 
     let ref port = if args.len() > 2 {
         let port = args[2].as_str();
@@ -34,7 +35,6 @@ fn main() -> ExitCode {
         DEFAULT_PORT
     };
 
-    let dir_path_buf = Into::<PathBuf>::into(dir_path);
     if !(dir_path_buf.exists() && dir_path_buf.is_dir()) {
         eprintln!("`{dir_path}` is not a valid directory");
         return ExitCode::FAILURE
@@ -53,7 +53,12 @@ fn main() -> ExitCode {
         println!("indexing took: {end} millis");
     }
 
-    let mut server = Server::new(model);
+    let Ok(curr_dir) = env::current_dir() else {
+        eprintln!("could not get current directory");
+        return ExitCode::FAILURE
+    };
+
+    let mut server = Server::new(model, &curr_dir);
 
     let addr = format!("{ADDR}:{port}");
     if let Err(err) = server.serve(addr.as_str()) {
@@ -63,3 +68,9 @@ fn main() -> ExitCode {
 
     ExitCode::SUCCESS
 }
+
+/* TODO:
+    Parallelize indexing process and start the server instantly,
+    then if user sends a query request the server should respond with
+    a data we have indexed right now, even though the indexing process is not finished yet.
+*/

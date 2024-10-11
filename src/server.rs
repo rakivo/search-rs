@@ -1,18 +1,22 @@
 use std::str;
+use std::path::PathBuf;
 use std::io::{Result as IoResult, Error as IoError, ErrorKind as IoErrorKind};
 
 use tiny_http::{Server as TinyServer, Method, Header, Request, Response, StatusCode};
 
 use crate::core::Model;
 
+const DELIM: char = if cfg!(windows) { '\\' } else { '/' };
+
 pub struct Server<'a> {
-    model: Model<'a>
+    model: Model<'a>,
+    full_root_path: &'a PathBuf
 }
 
 impl<'a> Server<'a> {
     #[inline]
-    pub fn new(model: Model<'a>) -> Self {
-        Self {model}
+    pub fn new(model: Model<'a>, full_root_path: &'a PathBuf) -> Self {
+        Self {model, full_root_path}
     }
 
     pub fn serve(&mut self, addr: &str) -> IoResult::<()> {
@@ -25,6 +29,7 @@ impl<'a> Server<'a> {
         for rq in server.incoming_requests() {
             match (rq.method(), rq.url()) {
                 (Method::Post, "/api/search") => self.serve_search(rq)?,
+                (Method::Get, "/styles.css") => serve_bytes(rq, include_bytes!("styles.css"), "text/css; charset=UTF-8")?,
                 (Method::Get, "/script.js") => serve_bytes(rq, include_bytes!("script.js"), "text/javascript; charset=UTF-8")?,
                 _ => serve_bytes(rq, include_bytes!("query.html"), "text/html; charset=UTF-8")?
             }
@@ -48,10 +53,15 @@ impl<'a> Server<'a> {
             }
         };
 
+        let full = self.full_root_path.display();
         let result = self.model.search(&body)
             .into_iter()
             .take(20)
-            .collect::<Vec<_>>();
+            .map(|(path, ..)| {
+                let full_file_path = format!("{full}{DELIM}{path}", path = path.display());
+                let relative_file_path = path;
+                (full_file_path, relative_file_path)
+            }).collect::<Vec<_>>();
 
         let json = serde_json::to_string(&result).unwrap();
         let content_type_header = Header::from_bytes("Content-Type", "application/json").unwrap();
