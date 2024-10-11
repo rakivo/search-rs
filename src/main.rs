@@ -23,17 +23,22 @@ fn main() -> ExitCode {
 
     let ref dir_path = args[1];
 
+    let ref port = if args.len() > 2 {
+        let port = args[2].as_str();
+        if port.len() != 4 || port.parse::<u16>().is_err() {
+            eprintln!("`{port}` is not a valid port to serve at");
+            return ExitCode::FAILURE
+        }
+        port
+    } else {
+        DEFAULT_PORT
+    };
+
     let dir_path_buf = Into::<PathBuf>::into(dir_path);
     if !(dir_path_buf.exists() && dir_path_buf.is_dir()) {
         eprintln!("`{dir_path}` is not a valid directory");
         return ExitCode::FAILURE
     }
-
-    let ref port = if args.len() > 3 {
-        args[2].as_str()
-    } else {
-        DEFAULT_PORT
-    };
 
     let contents = dir_get_contents(dir_path);
 

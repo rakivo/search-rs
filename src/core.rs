@@ -253,21 +253,20 @@ fn parse(file_path: &Path) -> IoResult::<String> {
         "pdf" => Pdf::parse(file_path),
         "html" => Html::parse(file_path),
         "xml" | "xhtml" => Xml::parse(file_path),
-        "txt"      | "css"     | "js"       | "json"    | "rs"      | "py"
-        "rb"       | "java"    | "c"        | "cpp"     | "go"      | "sh"
-        "md"       | "yaml"    | "ini"      | "sql"     | "csv"     | "log"
-        "makefile" | "bat"     | "php"      | "pl"      | "asm"     | "dockerfile"
-        "erb"      | "proto"   | "tf"       | "tfvars"  | "toml"    | "v"
-        "rspec"    | "ml"      | "dart"     | "lua"     | "coffee"  | "scss"
-        "less"     | "svg"     | "acl"      | "patch"   | "diff"    | "zsh"
-        "r"        | "groovy"  | "h"        | "hpp"     | "c++"     | "cpp"
-        "wxml"     | "wxs"     | "cfg"      | "zig"     | "env"     | "d"
-        "f90"      | "f"       | "jl"       | "cabal"   | "hs"      | "nim"
-        "sol"      | "swift"   | "mxml"     | "clj"     | "cljs"    | "lisp"
-        "el"       | "sml"     | "styl"     | "nut"     | "wsgi"    | "raku"
-        "q"        | "sage"    | "pike"     | "xqy"     | "slim"    | "hx"
-        "pmd"      | "gsql"    | "xml"      | "yaml"    | "html"    | "dart"
-        "caddyfile" => Txt::parse(file_path),
+          "txt"      | "css"     | "js"       | "json"    | "rs"       | "py"
+        | "rb"       | "java"    | "c"        | "cpp"     | "go"       | "sh"
+        | "md"       | "yaml"    | "ini"      | "sql"     | "csv"      | "log"
+        | "makefile" | "bat"     | "php"      | "pl"      | "asm"      | "dockerfile"
+        | "erb"      | "proto"   | "tf"       | "tfvars"  | "toml"     | "v"
+        | "rspec"    | "ml"      | "dart"     | "lua"     | "coffee"   | "scss"
+        | "less"     | "svg"     | "acl"      | "patch"   | "diff"     | "zsh"
+        | "r"        | "groovy"  | "h"        | "hpp"     | "c++"      | "nasm"
+        | "wxml"     | "wxs"     | "cfg"      | "zig"     | "env"      | "d"
+        | "f90"      | "f"       | "jl"       | "cabal"   | "hs"       | "nim"
+        | "sol"      | "swift"   | "mxml"     | "clj"     | "cljs"     | "lisp"
+        | "el"       | "sml"     | "styl"     | "nut"     | "wsgi"     | "raku"
+        | "q"        | "sage"    | "pike"     | "xqy"     | "slim"     | "hx"
+        | "pmd"      | "gsql"    | "cs"       | "ts"      | "gitignore"| "in" => Txt::parse(file_path),
         _ => Err(IoError::new(IoErrorKind::InvalidData, "unknown extension"))
     }
 }
