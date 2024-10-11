@@ -272,6 +272,11 @@ unsafe fn str_to_lower<'a>(s: &'a str) -> &'a str {
     str::from_utf8_unchecked(bytes)
 }
 
+#[inline]
+pub fn string_to_str(string: String) -> &'static str {
+    Box::leak(string.into_boxed_str())
+}
+
 // trim, stem and lowercase word avoiding copying
 #[inline]
 fn prepare_word<'a>(word: &'a str) -> Option::<&'a str> {
@@ -281,7 +286,7 @@ fn prepare_word<'a>(word: &'a str) -> Option::<&'a str> {
     let mut env = SnowballEnv::create(word);
     stem(&mut env);
     let word = match env.get_current() {
-        Cow::Owned(ow) => Box::leak(ow.into_boxed_str()),
+        Cow::Owned(ow) => string_to_str(ow),
         Cow::Borrowed(bw) => bw,
     };
     Some(word)
@@ -310,10 +315,10 @@ pub struct Model<'a> {
 }
 
 impl<'a> Model<'a> {
-    pub fn new() -> Self {
+    pub fn new(docs_count: usize) -> Self {
         Model {
-            docs: Docs::with_capacity_and_hasher(128, RandomState::default()),
-            df: HashMap::with_capacity_and_hasher(128, RandomState::default())
+            docs: Docs::with_capacity_and_hasher(docs_count, RandomState::default()),
+            df: HashMap::with_capacity_and_hasher(docs_count * 128, RandomState::default())
         }
     }
 
@@ -334,7 +339,7 @@ impl<'a> Model<'a> {
             }
         }).collect::<Vec::<_>>();
 
-        ranks.sort_unstable_by(|a, b| unsafe { b.1.partial_cmp(&a.1).unwrap_unchecked() });
+        ranks.par_sort_unstable_by(|a, b| unsafe { b.1.partial_cmp(&a.1).unwrap_unchecked() });
         ranks
     }
 

@@ -8,6 +8,10 @@ async function search(prompt) {
         body: prompt,
     });
     const json = await response.json();
+    if (json.length == 0) {
+        results.innerHTML = "[no matches]";
+        return;
+    }
     results.innerHTML = "";
     for ([path, rank] of json) {
         let item = document.createElement("span");

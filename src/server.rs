@@ -1,5 +1,4 @@
 use std::str;
-use std::sync::{Arc, Mutex};
 use std::io::{Result as IoResult, Error as IoError, ErrorKind as IoErrorKind};
 
 use tiny_http::{Server as TinyServer, Method, Header, Request, Response, StatusCode};
@@ -7,19 +6,19 @@ use tiny_http::{Server as TinyServer, Method, Header, Request, Response, StatusC
 use crate::core::Model;
 
 pub struct Server<'a> {
-    model: Arc::<Mutex::<Model<'a>>>
+    model: Model<'a>
 }
 
 impl<'a> Server<'a> {
     #[inline]
-    pub fn new(model: Arc::<Mutex::<Model<'a>>>) -> Self {
+    pub fn new(model: Model<'a>) -> Self {
         Self {model}
     }
 
-    pub fn serve(&mut self, addr: &'a str) -> IoResult::<()> {
+    pub fn serve(&mut self, addr: &str) -> IoResult::<()> {
         let server = TinyServer::http(addr).map_err(|err| {
             return IoError::new(IoErrorKind::AddrNotAvailable, format!("could not serve at `{addr}`: {err}"))
-        }).unwrap();
+        })?;
 
         println!("listening on <http://{addr}/>");
 
@@ -35,33 +34,28 @@ impl<'a> Server<'a> {
     }
 
     pub fn serve_search(&self, mut request: Request) -> IoResult::<()> {
-        let mut buf = Vec::new();
+        let mut buf = Vec::with_capacity(request.body_length().unwrap());
         if let Err(err) = request.as_reader().read_to_end(&mut buf) {
-            eprintln!("ERROR: could not read the body of the request: {err}");
-            return serve_500(request);
+            eprintln!("could not read the body of the request: {err}");
+            return serve_500(request)
         }
 
         let body = match str::from_utf8(&buf) {
             Ok(body) => body,
             Err(err) => {
                 eprintln!("could not interpret body as UTF-8 string: {err}");
-                return serve_400(request, "Body must be a valid UTF-8 string")
+                return serve_400(request, "body must be a valid UTF-8 string")
             }
         };
 
-        let model = self.model.lock().unwrap();
-        let result = model.search(&body);
+        let result = self.model.search(&body)
+            .into_iter()
+            .take(20)
+            .collect::<Vec<_>>();
 
-        let json = match serde_json::to_string(&result.iter().take(20).collect::<Vec<_>>()) {
-            Ok(json) => json,
-            Err(err) => {
-                eprintln!("could not convert search results to JSON: {err}");
-                return serve_500(request)
-            }
-        };
-
+        let json = serde_json::to_string(&result).unwrap();
         let content_type_header = Header::from_bytes("Content-Type", "application/json").unwrap();
-        request.respond(Response::from_string(&json).with_header(content_type_header))
+        request.respond(Response::from_string(json).with_header(content_type_header))
     }
 }
 
