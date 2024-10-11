@@ -16,7 +16,7 @@ use foldhash::fast::RandomState;
 use xml::reader::{EventReader, XmlEvent};
 use crate::snowball::{SnowballEnv, algorithms::english_stemmer::stem};
 
-const GIG: u64 = 1073741824;
+const GIG: u64 = 1024 * 1024 * 1024;
 
 const SPLIT_CHARACTERS: &[char] = &[' ', ',', '.', ';'];
 
@@ -69,7 +69,7 @@ macro_rules! am {
 }
 
 #[inline]
-fn read_file<P>(file_path: P) -> IoResult::<BufReader<File>>
+fn read_file<P>(file_path: P) -> IoResult::<BufReader::<File>>
 where
     P: AsRef::<Path> + Debug
 {
@@ -112,7 +112,8 @@ fn load_pdf<P>(path: P) -> Result::<Document, IoError>
 where
     P: AsRef::<Path>
 {
-    Document::load_filtered(path, filter_func).map_err(|e| IoError::new(IoErrorKind::Other, e.to_string()))
+    Document::load_filtered(path, filter_func)
+        .map_err(|e| IoError::new(IoErrorKind::Other, e.to_string()))
 }
 
 fn get_pdf_text(doc: &Document) -> Result::<PdfText, IoError> {
@@ -135,7 +136,7 @@ fn get_pdf_text(doc: &Document) -> Result::<PdfText, IoError> {
                 text.split('\n')
                     .map(|s| s.to_lowercase())
                     .collect()))
-        }).for_each(|page: Result::<_, IoError>| {
+        }).for_each(|page: IoResult::<_>| {
             let mut pdf_text = unsafe { pdf_text_am.lock().unwrap_unchecked() };
             match page {
                 Ok((npage, lines)) => { pdf_text.text.insert(npage, lines); },
@@ -170,7 +171,10 @@ impl ParseFn for Pdf {
             return Err(IoError::new(IoErrorKind::InvalidData, "could not parse document as pdf"))
         }
 
-        let string = text.text.iter().map(|(_, text)| text.join(" ")).collect::<String>();
+        let string = text.text.iter()
+            .map(|(_, text)| text.join(" "))
+            .collect();
+
         Ok(string)
     }
 }
@@ -183,7 +187,7 @@ impl ParseFn for Txt {
     where
         P: AsRef::<Path> + Debug
     {
-        read_to_string(&file_path)
+        read_to_string(file_path)
     }
 }
 
@@ -249,7 +253,21 @@ fn parse(file_path: &Path) -> IoResult::<String> {
         "pdf" => Pdf::parse(file_path),
         "html" => Html::parse(file_path),
         "xml" | "xhtml" => Xml::parse(file_path),
-        "txt"  | "css" | "js" | "json" | "rs" | "py" | "rb" | "java" | "c" | "cpp" | "go" | "sh" | "md" | "yaml" | "ini" | "sql" | "csv" | "log" | "makefile" | "bat" | "php" | "pl" | "asm" | "dockerfile" | "erb" | "proto" | "tf" | "tfvars" | "toml" | "v" | "rspec" | "ml" | "dart" | "lua" | "coffee" | "scss" | "less" | "svg" | "acl" | "patch" | "diff" | "zsh" | "r" | "groovy" | "h" | "hpp" | "markdown" | "cson" | "wxml" | "wxs" | "cfg" | "properties" | "env" | "d" | "f90" | "f" | "jl" | "cabal" | "hs" | "nim" | "sol" | "swift" | "mxml" | "clj" | "cljs" | "lisp" | "el" | "sml" | "styl" | "nut" | "wsgi" | "raku" | "q" | "sage" | "pike" | "xqy" | "slim" | "hx" | "pmd" | "gsql" | "caddyfile" => Txt::parse(file_path),
+        "txt"      | "css"     | "js"       | "json"    | "rs"      | "py"
+        "rb"       | "java"    | "c"        | "cpp"     | "go"      | "sh"
+        "md"       | "yaml"    | "ini"      | "sql"     | "csv"     | "log"
+        "makefile" | "bat"     | "php"      | "pl"      | "asm"     | "dockerfile"
+        "erb"      | "proto"   | "tf"       | "tfvars"  | "toml"    | "v"
+        "rspec"    | "ml"      | "dart"     | "lua"     | "coffee"  | "scss"
+        "less"     | "svg"     | "acl"      | "patch"   | "diff"    | "zsh"
+        "r"        | "groovy"  | "h"        | "hpp"     | "c++"     | "cpp"
+        "wxml"     | "wxs"     | "cfg"      | "zig"     | "env"     | "d"
+        "f90"      | "f"       | "jl"       | "cabal"   | "hs"      | "nim"
+        "sol"      | "swift"   | "mxml"     | "clj"     | "cljs"    | "lisp"
+        "el"       | "sml"     | "styl"     | "nut"     | "wsgi"    | "raku"
+        "q"        | "sage"    | "pike"     | "xqy"     | "slim"    | "hx"
+        "pmd"      | "gsql"    | "xml"      | "yaml"    | "html"    | "dart"
+        "caddyfile" => Txt::parse(file_path),
         _ => Err(IoError::new(IoErrorKind::InvalidData, "unknown extension"))
     }
 }
