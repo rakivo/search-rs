@@ -17,7 +17,7 @@ const DEFAULT_PORT: &str = "6969";
 fn main() -> ExitCode {
     let args = env::args().collect::<Vec::<_>>();
     if args.len() < 2 {
-        eprintln!("usage: {program} <directory to search in> [addr to serve at] [port to serve at]", program = args[0]);
+        eprintln!("usage: {program} <directory to search in> [port to serve at]", program = args[0]);
         return ExitCode::FAILURE
     }
 

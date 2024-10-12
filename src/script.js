@@ -1,14 +1,12 @@
 const QUERY = document.getElementById("query");
-window.onload = () => {
-    QUERY.value = "";
-};
+QUERY.value = "";
 const DEBOUNCE_TIMEOUT = 350;
 const PATH_PREVIEW = document.createElement("div");
 PATH_PREVIEW.classList.add("path-preview");
 document.body.appendChild(PATH_PREVIEW);
 
-const moon = document.querySelector(".clickable-moon");
-moon.addEventListener("click", () => {
+const MOON = document.querySelector(".clickable-moon");
+MOON.addEventListener("click", () => {
     document.body.classList.toggle("dark-mode");
 });
 
