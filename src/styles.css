@@ -9,9 +9,42 @@ body {
     background-color: #f0f0f0;
 }
 
+body.dark-mode {
+    background-color: #222;
+    color: #fff;
+}
+
 h1 {
     font-size: 24px;
     color: #333;
+}
+
+body.dark-mode h1 {
+    color: #fff;
+}
+
+.moon {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    height: 40px; 
+    width: 40px; 
+    box-shadow: -8px 8px 0 5px rgb(50, 50, 50);
+    border-radius: 50%;
+}
+
+.clickable-moon {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    width: 55px;
+    height: 55px;
+    background-color: transparent;
+    cursor: pointer;
+}
+
+body.dark-mode .moon {
+    box-shadow: -10px 10px 0 5px gray;
 }
 
 input[type="text"] {
@@ -22,6 +55,13 @@ input[type="text"] {
     font-size: 16px;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
     transition: all 0.2s;
+}
+
+body.dark-mode input[type="text"] {
+    background-color: #333;
+    color: white;
+    border-color: #666;
+    box-shadow: 0 0 8px rgba(255, 255, 255, 0.4);
 }
 
 input[type="text"]:focus {
@@ -43,11 +83,20 @@ input[type="text"]:focus {
     position: relative;
 }
 
+body.dark-mode #results {
+    background-color: #333;
+    border-color: #666;
+}
+
 #results span {
     display: block;
     margin-bottom: 5px;
     font-size: 14px;
     color: #333;
+}
+
+body.dark-mode #results span {
+    color: white;
 }
 
 #results:empty {
@@ -65,10 +114,14 @@ input[type="text"]:focus {
     display: none;
     max-width: 250px;
     font-size: 12px;
-
     white-space: pre-wrap;
     word-break: break-all;
     overflow-wrap: break-word;
+}
+
+body.dark-mode .path-preview {
+    background-color: rgba(24, 24, 24, 0.95);
+    color: white;
 }
 
 .copy-text {
@@ -76,4 +129,8 @@ input[type="text"]:focus {
     opacity: 0.5;
     margin-bottom: 12px;
     text-align: center;
+}
+
+body.dark-mode .copy-text {
+    color: white;
 }

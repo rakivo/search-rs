@@ -7,6 +7,11 @@ const PATH_PREVIEW = document.createElement("div");
 PATH_PREVIEW.classList.add("path-preview");
 document.body.appendChild(PATH_PREVIEW);
 
+const moon = document.querySelector(".clickable-moon");
+moon.addEventListener("click", () => {
+    document.body.classList.toggle("dark-mode");
+});
+
 async function search(prompt) {
     const results = document.getElementById("results");
     results.innerHTML = "";
@@ -28,6 +33,7 @@ async function search(prompt) {
         item.textContent = path;
 
         item.addEventListener("mouseenter", () => {
+            item.style.cursor = "copy";
             PATH_PREVIEW.textContent = full_path;
             PATH_PREVIEW.style.display = "block";
             PATH_PREVIEW.style.width = "auto";
@@ -44,12 +50,7 @@ async function search(prompt) {
         });
 
         item.addEventListener("click", () => {
-            navigator.clipboard.writeText(full_path).then(() => {
-                document.body.style.cursor = "copy";
-                setTimeout(() => {
-                    document.body.style.cursor = "default";
-                }, 150);
-            }).catch(err => {
+            navigator.clipboard.writeText(full_path).catch(err => {
                 console.error('could not to copy: ', err);
             });
         });
