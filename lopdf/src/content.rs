@@ -19,25 +19,3 @@ impl Operation {
 pub struct Content<Operations: AsRef<[Operation]> = Vec<Operation>> {
     pub operations: Operations,
 }
-
-// impl<Operations: AsRef<[Operation]>> Content<Operations> {
-//     /// Encode content operations.
-//     pub fn encode(&self) -> Result<Vec<u8>> {
-//         let mut buffer = Vec::new();
-//         let mut first_operation = true;
-//         for operation in self.operations.as_ref() {
-//             // Add new line after each operation except the last one.
-//             if first_operation {
-//                 first_operation = false;
-//             } else {
-//                 buffer.write_all(b"\n")?;
-//             }
-//             for operand in &operation.operands {
-//                 Writer::write_object(&mut buffer, operand)?;
-//                 buffer.write_all(b" ")?;
-//             }
-//             buffer.write_all(operation.operator.as_bytes())?;
-//         }
-//         Ok(buffer)
-//     }
-// }
