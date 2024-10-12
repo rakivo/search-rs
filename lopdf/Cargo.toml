@@ -1,0 +1,28 @@
+[package]
+authors = [
+    "Junfeng Liu <china.liujunfeng@gmail.com>",
+    "Emulator <emulator@hotmail.it>",
+]
+categories = ["text-processing"]
+description = "A Rust library for PDF document manipulation."
+documentation = "https://docs.rs/crate/lopdf/"
+edition = "2021"
+homepage = "https://github.com/J-F-Liu/lopdf"
+keywords = ["pdf", "editing", "manipulation", "merge"]
+license = "MIT"
+name = "lopdf"
+readme = "README.md"
+repository = "https://github.com/J-F-Liu/lopdf.git"
+version = "0.34.0"
+
+[dependencies]
+encoding_rs = "0.8.32"
+flate2 = "1.0"
+indexmap = "2.2.3"
+log = "0.4"
+nom = "7.1"
+nom_locate = "4.2.0"
+weezl = "0.1"
+rangemap = "1.5"
+md-5 = "0.10.6"
+rayon = "1.10.0"

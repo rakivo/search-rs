@@ -3,6 +3,5 @@ Cargo.lock
 docs.gl
 gl4
 html
-lopdf
 pdf
 *.pdf
