@@ -16,8 +16,8 @@ use lopdf::{Document, Object};
 use foldhash::fast::RandomState;
 use xml::reader::{EventReader, XmlEvent};
 
-use crate::term::Signal;
 use crate::dir_rec::DirRec;
+use crate::term::{Signal, SIGNAL_STOP};
 use crate::snowball::{SnowballEnv, algorithms::english_stemmer::stem};
 
 const GIG: u64 = 1024 * 1024 * 1024;
@@ -379,12 +379,12 @@ impl<'a> Model<'a> {
                 let mut zelf = unsafe { zelf.lock().unwrap_unchecked() };
                 zelf.add_document(file_path, content);
             });
-            zelf.lock().unwrap().milestones_tx.send(0).unwrap();
+            zelf.lock().unwrap().milestones_tx.send(SIGNAL_STOP).unwrap();
         } else {
             contents.iter().for_each(|(file_path, content)| {
                 self.add_document(file_path, content);
             });
-            self.milestones_tx.send(0).unwrap();
+            self.milestones_tx.send(SIGNAL_STOP).unwrap();
         }
     }
 

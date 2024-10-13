@@ -4,6 +4,8 @@ use std::sync::mpsc::Receiver;
 
 pub type Signal = u8;
 
+pub const SIGNAL_STOP: u8 = 0;
+
 pub fn draw_percentage(rx: Receiver::<Signal>, msgs: String) {
     let mut percentage = None;
     loop {
@@ -18,7 +20,7 @@ pub fn draw_percentage(rx: Receiver::<Signal>, msgs: String) {
         };
 
         match msg {
-            0 => return,
+            SIGNAL_STOP => return,
             perc @ _ => percentage = Some(perc)
         }
     }
