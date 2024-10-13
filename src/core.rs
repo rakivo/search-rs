@@ -3,9 +3,9 @@ use std::slice;
 use std::fmt::Debug;
 use std::borrow::Cow;
 use std::path::{Path, PathBuf};
-use std::collections::{VecDeque, BTreeMap};
+use std::collections::BTreeMap;
 #[cfg(unix)] use std::os::unix::fs::MetadataExt;
-use std::fs::{File, read_dir, metadata, read_to_string};
+use std::fs::{File, metadata, read_to_string};
 use std::io::{BufReader, Result as IoResult, Error as IoError, ErrorKind as IoErrorKind};
 
 use rayon::prelude::*;
@@ -14,6 +14,8 @@ use hashbrown::HashMap;
 use lopdf::{Document, Object};
 use foldhash::fast::RandomState;
 use xml::reader::{EventReader, XmlEvent};
+
+use crate::dir_rec::DirRec;
 use crate::snowball::{SnowballEnv, algorithms::english_stemmer::stem};
 
 const GIG: u64 = 1024 * 1024 * 1024;
@@ -26,43 +28,6 @@ type Contents = Vec::<(PathBuf, String)>;
 type DocFreq<'a> = HashMap<&'a str, usize>;
 type TermFreq<'a> = HashMap<&'a str, usize>;
 type Ranks<'a> = Vec::<(&'a PathBuf, f32)>;
-
-pub struct DirRec {
-    rec: usize,
-    stack: VecDeque::<PathBuf>,
-}
-
-impl DirRec {
-    pub fn new<P>(root: P) -> DirRec
-    where
-        P: Into::<PathBuf>
-    {
-        let mut stack = VecDeque::new();
-        stack.push_back(root.into());
-        DirRec {rec: 0, stack}
-    }
-}
-
-impl Iterator for DirRec {
-    type Item = PathBuf;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        while let Some(p) = self.stack.pop_front() {
-            if p.is_file() { return Some(p) }
-
-            match read_dir(&p) {
-                Ok(es) => es.filter_map(Result::ok).for_each(|e| {
-                    self.rec += 1;
-                    if self.rec >= 500_000 {
-                        panic!("directory is too big, aborting..")
-                    }
-                    self.stack.push_back(e.path())
-                }),
-                Err(e) => eprintln!("ERROR: {e}")
-            }
-        } None
-    }
-}
 
 macro_rules! am {
     ($($tt: tt) *) => { std::sync::Arc::new(std::sync::Mutex::new($($tt) *)) }

@@ -15,3 +15,4 @@ lopdf = { path = "lopdf" }
 
 [features]
 dbg = []
+dir_rec_stop_on_error = []

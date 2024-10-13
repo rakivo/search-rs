@@ -9,6 +9,7 @@ mod core;
 use core::*;
 mod server;
 use server::*;
+mod dir_rec;
 mod snowball;
 
 const ADDR: &str = "localhost";
@@ -40,11 +41,13 @@ fn main() -> ExitCode {
         return ExitCode::FAILURE
     }
 
+    println!("reading files..");
     let contents = dir_get_contents(dir_path);
 
     #[cfg(feature = "dbg")]
     let start = Instant::now();
 
+    println!("indexing files..");
     let mut model = Model::new(contents.len());
     model.add_contents(&contents);
 
