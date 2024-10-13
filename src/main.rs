@@ -2,11 +2,15 @@ use std::env;
 #[cfg(feature = "dbg")]
 use std::time::Instant;
 use std::path::PathBuf;
+use std::thread::spawn;
 use std::process::ExitCode;
+use std::sync::mpsc::channel;
 
 #[macro_use]
 mod core;
 use core::*;
+mod term;
+use term::*;
 mod server;
 use server::*;
 mod dir_rec;
@@ -14,6 +18,13 @@ mod snowball;
 
 const ADDR: &str = "localhost";
 const DEFAULT_PORT: &str = "6969";
+
+macro_rules! msg_print {
+    ($msgs: expr, $($tt: tt) *) => {{
+        let msg = format!($($tt) *);
+        $msgs.push_str(&msg);
+    }};
+}
 
 fn main() -> ExitCode {
     let args = env::args().collect::<Vec::<_>>();
@@ -30,8 +41,7 @@ fn main() -> ExitCode {
         if port.len() != 4 || port.parse::<u16>().is_err() {
             eprintln!("`{port}` is not a valid port to serve at");
             return ExitCode::FAILURE
-        }
-        port
+        } port
     } else {
         DEFAULT_PORT
     };
@@ -41,14 +51,21 @@ fn main() -> ExitCode {
         return ExitCode::FAILURE
     }
 
-    println!("reading files..");
+    let mut msgs = String::new();
+
+    msg_print!(msgs, "reading files..\n");
+
     let contents = dir_get_contents(dir_path);
+
+    msg_print!(msgs, "starting indexing {count} files..", count = contents.len());
+
+    let (tx, rx) = channel();
+    let term_thread = spawn(move || draw_percentage(rx, msgs));
 
     #[cfg(feature = "dbg")]
     let start = Instant::now();
 
-    println!("indexing files..");
-    let mut model = Model::new(contents.len());
+    let mut model = Model::new(tx, contents.len());
     model.add_contents(&contents);
 
     #[cfg(feature = "dbg")] {
@@ -68,6 +85,8 @@ fn main() -> ExitCode {
         eprintln!("{err}");
         return ExitCode::FAILURE
     }
+
+    term_thread.join().unwrap();
 
     ExitCode::SUCCESS
 }

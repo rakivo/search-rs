@@ -2,6 +2,7 @@ use std::str;
 use std::slice;
 use std::fmt::Debug;
 use std::borrow::Cow;
+use std::sync::mpsc::Sender;
 use std::path::{Path, PathBuf};
 use std::collections::BTreeMap;
 #[cfg(unix)] use std::os::unix::fs::MetadataExt;
@@ -15,6 +16,7 @@ use lopdf::{Document, Object};
 use foldhash::fast::RandomState;
 use xml::reader::{EventReader, XmlEvent};
 
+use crate::term::Signal;
 use crate::dir_rec::DirRec;
 use crate::snowball::{SnowballEnv, algorithms::english_stemmer::stem};
 
@@ -292,13 +294,26 @@ impl<'a> Doc<'a> {
 }
 
 pub struct Model<'a> {
+    // how many already indexed
+    count: usize,
+    milestones_tx: Sender::<Signal>,
+    milestones: Vec::<(usize, Signal)>,
+
     pub df: DocFreq<'a>,
     pub docs: Docs<'a>
 }
 
 impl<'a> Model<'a> {
-    pub fn new(docs_count: usize) -> Self {
+    #[inline]
+    fn calculate_milestones(docs_count: usize) -> Vec::<(usize, Signal)> {
+        (5..=100).step_by(5).map(|count| ((docs_count * count) / 100, count as _)).collect()
+    }
+
+    pub fn new(milestones_tx: Sender::<Signal>, docs_count: usize) -> Self {
         Model {
+            count: 0,
+            milestones_tx,
+            milestones: Self::calculate_milestones(docs_count),
             docs: Docs::with_capacity_and_hasher(docs_count, RandomState::default()),
             df: HashMap::with_capacity_and_hasher(docs_count * 128, RandomState::default())
         }
@@ -325,6 +340,15 @@ impl<'a> Model<'a> {
         ranks
     }
 
+    fn print_progress(&self) {
+        self.milestones.iter().for_each(|(count, percentage)| {
+            if self.count.eq(count) {
+                self.milestones_tx.send(*percentage).unwrap();
+                return
+            }
+        })
+    }
+
     pub fn add_document(&mut self, file_path: &'a PathBuf, content: &'a str) {
         self.rm_document(&file_path);
 
@@ -338,6 +362,8 @@ impl<'a> Model<'a> {
             }
         });
 
+        self.count += 1;
+        self.print_progress();
         self.docs.insert(file_path, doc);
     }
 
@@ -353,10 +379,12 @@ impl<'a> Model<'a> {
                 let mut zelf = unsafe { zelf.lock().unwrap_unchecked() };
                 zelf.add_document(file_path, content);
             });
+            zelf.lock().unwrap().milestones_tx.send(0).unwrap();
         } else {
             contents.iter().for_each(|(file_path, content)| {
                 self.add_document(file_path, content);
             });
+            self.milestones_tx.send(0).unwrap();
         }
     }
 
@@ -385,6 +413,7 @@ pub fn dir_get_contents(dir_path: &str) -> Contents {
     let dir = DirRec::new(dir_path);
     dir.into_iter()
         .par_bridge()
-        .filter_map(|e| parse(&e).ok().map(|r| (e, r)))
-        .collect()
+        .filter_map(|e| {
+            parse(&e).ok().map(|r| (e, r))
+        }).collect()
 }
